@@ -1,0 +1,286 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expanses</title>
+    <link rel="stylesheet" href="Style-exp.css">
+</head>
+<body>
+    <header class="topbar">
+
+<button onclick="goBack()" class="btn-back">
+←
+</button>
+
+<h2>Tambah Pengeluaran</h2>
+
+</header>
+
+<div class="expense-form">
+
+<label>Tanggal</label>
+<input type="date" id="tanggal">
+
+<label>Kategori</label>
+<select id="kategori">
+<option value="Bahan Baku">Bahan Baku</option>
+<option value="Operasional">Operasional</option>
+<option value="Transport">Transport</option>
+<option value="Listrik">Listrik</option>
+<option value="Lainnya">Lainnya</option>
+</select>
+
+<label>Keterangan</label>
+<input type="text" id="keterangan" placeholder="Contoh: beli ayam">
+
+<label>Jumlah</label>
+<input type="text" id="jumlah" placeholder="contoh: 50k / 50000" oninput="formatRupiah(this)">
+
+<button onclick="saveExpense()" class="btn-save">
+Simpan Expense
+</button>
+
+</div>
+
+<h3>Pengeluaran Hari Ini</h3>
+
+
+<div id="todayExpenses" class="expense-list">
+Loading...
+</div>
+
+<div id="loadingSave" class="loading-save" style="display:none">
+<div class="spinner"></div>
+<span>Menyimpan...</span>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+    const API_URL ="https://script.google.com/macros/s/AKfycbyGmDQj-Z7T_rkVxADzJ6UUaGQSVy1Mi_MQWeShnAVarzITvt3FfnlD2Kq8LERLmUJ4/exec";
+
+    document.getElementById("tanggal").value =
+    new Date().toISOString().split("T")[0];
+
+
+async function saveExpense(){
+
+const tanggal = document.getElementById("tanggal").value;
+const kategori = document.getElementById("kategori").value;
+const keterangan = document.getElementById("keterangan").value;
+const jumlah = document.getElementById("jumlah").value.replace(/\./g,"");
+
+if(!tanggal || !jumlah){
+showToast("Tanggal dan jumlah wajib diisi","error");
+return;
+}
+
+document.getElementById("loadingSave").style.display="flex";
+
+const payload = {
+action:"expense",
+payload:{
+tanggal,
+kategori,
+keterangan,
+jumlah
+}
+};
+
+try{
+
+const res = await fetch(API_URL,{
+method:"POST",
+body:JSON.stringify(payload)
+});
+
+const json = await res.json();
+
+document.getElementById("loadingSave").style.display="none";
+
+if(json.success){
+
+showToast("Expense berhasil disimpan","success");
+
+/* reset form */
+document.getElementById("kategori").value="Bahan Baku";
+document.getElementById("keterangan").value="";
+document.getElementById("jumlah").value="";
+
+/* fokus kembali ke input pertama */
+document.getElementById("keterangan").focus();
+
+}else{
+
+showToast("Gagal menyimpan data","error");
+
+}
+
+}catch(err){
+
+document.getElementById("loadingSave").style.display="none";
+showToast("Koneksi gagal","error");
+
+}
+
+setTimeout(()=>{
+    loadTodayExpenses();
+},500)
+
+
+}
+
+document.addEventListener("keydown", function(e){
+
+if(e.key === "Enter"){
+
+e.preventDefault(); // supaya tidak submit default
+saveExpense();
+
+}
+
+});
+
+function showToast(msg,type){
+
+const toast = document.getElementById("toast");
+
+toast.innerText = msg;
+toast.className = "toast " + type;
+toast.style.display = "block";
+
+setTimeout(()=>{
+toast.style.display="none";
+},2000);
+
+}
+
+function formatRupiah(input){
+
+let value = input.value.toLowerCase().replace(/\s/g,'');
+
+if(value.includes("j")){
+value = value.replace("j","");
+value = parseFloat(value || 0) * 1000000;
+}
+else if(value.includes("k")){
+value = value.replace("k","");
+value = parseFloat(value || 0) * 1000;
+}
+else{
+value = value.replace(/\D/g,"");
+}
+
+if(!value){
+input.value="";
+return;
+}
+
+input.value = new Intl.NumberFormat("id-ID").format(value);
+
+}
+
+
+async function loadTodayExpenses(){
+
+const res = await fetch(API_URL + "?action=today_expenses");
+const json = await res.json();
+
+const container = document.getElementById("todayExpenses");
+
+if(!json.data.length){
+container.innerHTML = "Belum ada pengeluaran hari ini";
+return;
+}
+
+let grouped = {};
+let total = 0;
+
+json.data.forEach(e=>{
+
+if(!grouped[e.kategori]){
+grouped[e.kategori] = [];
+}
+
+grouped[e.kategori].push(e);
+
+total += Number(e.jumlah);
+
+});
+
+let html = "";
+
+for(const kategori in grouped){
+
+html += `<div class="expense-category">
+<h4>${kategori}</h4>
+`;
+
+grouped[kategori].forEach(item=>{
+
+html += `
+<div class="expense-item">
+<span>${item.keterangan}</span>
+<b>Rp ${new Intl.NumberFormat("id-ID").format(item.jumlah)}</b>
+</div>
+`;
+
+});
+
+html += `</div>`;
+
+}
+
+html += `
+<div class="expense-total">
+Total Hari Ini : 
+<b>Rp ${new Intl.NumberFormat("id-ID").format(total)}</b>
+</div>
+`;
+
+container.innerHTML = html;
+
+}
+
+
+function goBack(){
+window.location.href = "index.html";
+}
+
+
+let expenseFilter = "today";
+
+function setExpenseFilter(type,btn){
+
+expenseFilter = type;
+
+document.querySelectorAll(".expense-filter button")
+.forEach(b=>b.classList.remove("active"));
+
+btn.classList.add("active");
+
+if(type === "custom"){
+document.getElementById("customDateFilter").style.display="block";
+}else{
+document.getElementById("customDateFilter").style.display="none";
+loadTodayExpenses();
+}
+
+}
+
+
+function applyExpenseFilter(){
+
+const start = document.getElementById("startExpenseDate").value;
+const end = document.getElementById("endExpenseDate").value;
+
+loadTodayExpenses(start,end);
+
+}
+
+
+
+loadTodayExpenses();
+</script>
+</body>
+</html>

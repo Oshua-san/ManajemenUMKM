@@ -1,0 +1,176 @@
+:root{
+  --green:#A8DF8E;
+  --bg:#F0FFDF;
+  --pink-soft:#FFD8DF;
+  --pink:#FFAAB8;
+}
+
+*{box-sizing:border-box;font-family:Arial}
+
+body{
+  margin:0;
+  background:#ccc;
+}
+
+.app{
+  height:100vh;
+  background:var(--bg);
+  display:flex;
+  flex-direction:column;
+  padding:10px;
+}
+
+/* HEADER */
+.header{
+  text-align:center;
+  font-size:20px;
+  font-weight:bold;
+}
+
+/* FORM */
+.form{
+  display:flex;
+  gap:10px;
+  margin:8px 0;
+}
+.form input{
+  flex:1;
+  padding:8px;
+  border-radius:8px;
+  border:1px solid #ccc;
+}
+
+/* CATEGORY */
+.category{
+  display:flex;
+  gap:8px;
+  margin-bottom:8px;
+}
+.category button{
+  flex:1;
+  padding:8px;
+  border:none;
+  border-radius:20px;
+  background:var(--pink-soft);
+}
+.category button.active{
+  background:var(--pink);
+  font-weight:bold;
+}
+
+/* CONTENT */
+.content{
+  flex:1;
+  display:flex;
+  gap:10px;
+  overflow:hidden;
+}
+
+/* MENU */
+.menu{
+  flex:1;
+  background:#fff;
+  border-radius:10px;
+  padding:8px;
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(140px,1fr));
+  gap:8px;
+  overflow-y:auto;
+}
+
+.card{
+  background:var(--green);
+  padding:10px;
+  border-radius:10px;
+  text-align:center;
+  cursor:pointer;
+  transition:.2s;
+}
+.card:active{
+  transform:scale(.95);
+}
+
+/* ORDER */
+.order{
+  width:320px;
+  background:#fff;
+  border-radius:10px;
+  padding:8px;
+  display:flex;
+  flex-direction:column;
+}
+
+.order-list{
+  flex:1;
+  overflow-y:auto;
+}
+
+.row{
+  display:grid;
+  grid-template-columns:1fr 40px 80px;
+  align-items:center;
+  margin-bottom:6px;
+}
+
+.action{
+  display:flex;
+  gap:5px;
+}
+.action button{
+  flex:1;
+  border:none;
+  border-radius:50%;
+  background:var(--pink);
+  cursor:pointer;
+  transition:.15s;
+}
+.action button:active{
+  transform:scale(.85);
+}
+
+/* TOTAL */
+.total{
+  font-weight:bold;
+  padding:8px 0;
+  border-top:1px solid #ccc;
+}
+
+/* BUTTON */
+.bottom-btn{
+  display:flex;
+  gap:6px;
+}
+.bottom-btn button{
+  flex:1;
+  padding:10px;
+  border:none;
+  border-radius:20px;
+  background:var(--green);
+  font-weight:bold;
+}
+
+/* RESPONSIVE TABLET */
+@media(max-width:768px){
+  .content{
+    flex-direction:column;
+  }
+  .order{
+    width:100%;
+    height:45%;
+  }
+}
+
+.status{
+ font-size:12px;
+  padding:4px 8px;
+  border-radius:8px;
+  display:inline-block;
+}
+
+.online{
+  color:green;
+}
+
+.offline{
+  color:red;
+}

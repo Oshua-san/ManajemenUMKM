@@ -1,0 +1,21 @@
+{
+  "name": "Manajemen Pencatatan UMKM",
+  "short_name": "Manajemen UMKM",
+  "start_url": "/ManajemenUMKM/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "MU-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "MU-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="manifest" href="manifest.json">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <!-- Optional: Link an external CSS file -->
+    <link rel="stylesheet" href="Style-das.css">
+    <link rel="icon" href="Xicon-Das.png" type="image/png">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+   <div id="dashboardPage" class="page">
+
+<header class="topbar">
+  <h2>Dashboard</h2>
+</header>
+
+<div class="filter">
+  <button class="active" onclick="setFilter('day',this)">Hari</button>
+  <button onclick="setFilter('week',this)">Custom</button>
+  <!-- <button onclick="setFilter('month',this)">Bulan</button> -->
+</div>
+
+<div class="date-filter" id="dateFilter" style="display:none">
+
+<input type="date" id="startDate">
+<input type="date" id="endDate">
+
+<button onclick="applyDateFilter()">Apply</button>
+
+</div>
+
+<div id="loading" class="loading" style="display:none">
+Loading data...
+</div>
+
+<div class="cards">
+
+  <div class="card-summary">
+    <small>Penjualan</small>
+    <h3 id="income">Rp 0</h3>
+  </div>
+
+  <div class="card-summary">
+    <small>Pengeluaran</small>
+    <h3 id="expense">Rp 0</h3>
+  </div>
+
+  <div class="card-summary">
+    <small>Laba</small>
+    <h3 id="profit">Rp 0</h3>
+  </div>
+
+  <div class="card">
+
+  <div class="card-title"><h3>Expense Ratio</h3></div>
+  <div class="ratio-container">
+  <div id="ratioText">0%</div>
+
+  <div class="ratio-bar">
+  <div id="ratioFill"></div>
+  </div>
+
+  </div>
+  </div>
+
+  <div class="card">
+  <h3>Revenue Trend</h3>
+  <canvas id="revenueChart"></canvas>
+</div>
+
+</div>
+
+<div class="top-products">
+
+  <h3>Produk Terlaris</h3>
+
+  <div id="topProducts"></div>
+
+</div>
+
+</div>
+
+<!-- Floating Buttons -->
+
+<div class="fab-container">
+
+<button class="fab expense" onclick="location.href='mexpanses.html'">
+💸
+</button>
+
+<button class="fab order" onclick="location.href='order.html'">
+➕
+</button>
+
+<script>
+
+const API_URL ="https://script.google.com/macros/s/AKfycbyGmDQj-Z7T_rkVxADzJ6UUaGQSVy1Mi_MQWeShnAVarzITvt3FfnlD2Kq8LERLmUJ4/exec";
+let filter = "day";
+
+
+
+function setFilter(f,btn){
+
+filter = f;
+
+document.querySelectorAll(".filter button")
+.forEach(b=>b.classList.remove("active"));
+
+btn.classList.add("active");
+
+if(filter === "week" || filter === "month"){
+  document.getElementById("dateFilter").style.display = "block";
+}else{
+  document.getElementById("dateFilter").style.display = "none";
+  loadDashboard();
+}
+
+}
+
+function applyDateFilter(){
+
+const start = document.getElementById("startDate").value;
+const end = document.getElementById("endDate").value;
+
+loadDashboard(start,end);
+
+}
+
+async function loadDashboard(start="",end=""){
+
+document.getElementById("loading").style.display = "flex";
+
+try{
+
+let url = API_URL + "?action=dashboard&period="+filter;
+
+if(start && end){
+url += "&start="+start+"&end="+end;
+}
+
+const res = await fetch(url);
+const json = await res.json();
+
+if(!json.success){
+alert("Data dashboard gagal");
+return;
+}
+
+document.getElementById("income").innerText =
+"Rp "+json.data.income.toLocaleString("id-ID");
+
+document.getElementById("expense").innerText =
+"Rp "+json.data.expense.toLocaleString("id-ID");
+
+document.getElementById("profit").innerText =
+"Rp "+json.data.profit.toLocaleString("id-ID");
+
+const income = json.data.income;
+const expense = json.data.expense;
+
+let ratio = 0;
+
+// if(income > 0){
+// ratio = Math.round((expense / income) * 100);
+// }
+
+if(income === 0 && expense > 0){
+  ratio = 100;
+}else if(income > 0){
+  ratio = Math.round((expense / income) * 100);
+}
+
+
+document.getElementById("ratioText").innerText = ratio + "%";
+
+const fill = document.getElementById("ratioFill");
+
+/* reset dulu */
+fill.style.width = "0%";
+
+/* delay kecil supaya animasi jalan */
+setTimeout(()=>{
+fill.style.width = ratio + "%";
+},100);
+
+if(ratio <= 40){
+fill.style.background = "green";
+}
+else if(ratio <= 65){
+fill.style.background = "orange";
+}
+else{
+fill.style.background = "red";
+}
+
+renderTopProducts(json.data.top_products);
+renderRevenueChart(json.data.trend);
+
+}catch(err){
+
+console.log(err);
+alert("Koneksi error");
+
+}
+
+document.getElementById("loading").style.display = "none";
+
+}
+
+
+let revenueChart;
+
+function renderRevenueChart(trend){
+
+  const labels = trend.map(t=>{
+   const d = new Date(t.date);
+    return d.toLocaleDateString("id-ID",{
+    day:"numeric", month:"short"});
+   });
+
+  const data = trend.map(t=>t.revenue);
+
+  const ctx = document.getElementById("revenueChart").getContext("2d");
+
+  if(revenueChart){
+    revenueChart.destroy();
+  }
+
+  revenueChart = new Chart(ctx,{
+    type:"line",
+    data:{
+      labels:labels,
+      datasets:[{
+        label:"Revenue",
+        data:data,
+        borderWidth:2,
+        tension:0.3,
+        fill:false
+      }]
+    },
+    options:{
+responsive:true,
+plugins:{
+legend:{display:false}
+},
+scales:{
+y:{
+beginAtZero:true
+}
+}
+}
+  });
+
+}
+
+function renderTopProducts(list){
+
+const el = document.getElementById("topProducts");
+
+el.innerHTML="";
+
+if(!list || list.length === 0){
+  el.innerHTML = "<small>Tidak ada data</small>";
+  return;
+}
+
+list.forEach((p,i)=>{
+
+el.innerHTML += `
+<div class="product-row">
+<div>${i+1}. ${p.nama}</div>
+<div>${p.qty}</div>
+</div>
+`;
+
+});
+
+}
+
+
+loadDashboard();
+</script>
+
+</body>
+</html>

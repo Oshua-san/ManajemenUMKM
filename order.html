@@ -1,0 +1,372 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="Style.css">
+    <link rel="icon" href="Xicon-Tab.png" type="image/png">
+    <title>Pesanan Makanan</title>
+
+</head>
+<body>
+
+  <div class="app">
+
+<!-- <div class="header">PESANAN MAKANAN <div id="status" class="status">...</div> </div> -->
+
+<header class="topbar">
+
+<button onclick="goBack()" class="btn-back">
+←
+</button>
+
+<div class="header">PESANAN MAKANAN <div id="status" class="status">...</div> </div>
+
+</header>
+
+
+<div class="form">
+  <input id="nama" placeholder="Atas Nama">
+  <input id="meja" placeholder="Meja Nomor">
+</div>
+
+<div class="category">
+  <button class="active" onclick="setCat('makanan',this)">Makanan</button>
+  <button onclick="setCat('minuman',this)">Minuman</button>
+  <button onclick="setCat('snack',this)">Snack</button>
+  <button onclick="setCat('addon',this)">Add-on</button>
+</div>
+
+<div class="content">
+
+  <div class="menu" id="menu"></div>
+
+  <div class="order">
+    <div class="order-list" id="order"></div>
+    <div class="total" id="total">Total: Rp 0</div>
+    <div class="bottom-btn">
+      <button onclick="printOrder()">PRINT</button>
+      <button id="btnSave" onclick="saveOrder()">SIMPAN</button>
+    </div>
+  </div>
+
+</div>
+</div>
+
+
+<script>
+
+const API_URL ="https://script.google.com/macros/s/AKfycbyGmDQj-Z7T_rkVxADzJ6UUaGQSVy1Mi_MQWeShnAVarzITvt3FfnlD2Kq8LERLmUJ4/exec";
+
+let menus = {};
+
+async function loadMenu(){
+
+  const res = await fetch(API_URL + "?action=menu");
+  const json = await res.json();
+
+  if(!json.success) return alert("Menu gagal diambil");
+
+  menus = {
+    makanan: [],
+    minuman: [],
+    snack: [],
+    addon: []
+  };
+
+  json.data.forEach(m=>{
+    menus[m.kategori].push({
+      menu_id:m.menu_id,
+      n:m.nama,
+      p:m.harga
+    });
+  });
+
+  renderMenu();
+}
+
+let cat="makanan";
+let orders=JSON.parse(localStorage.getItem("orders"))||{};
+let offlineQueue = JSON.parse(localStorage.getItem("offlineQueue")) || [];
+
+function saveQueue(){
+  localStorage.setItem("offlineQueue", JSON.stringify(offlineQueue));
+}
+
+async function sendQueue(){
+
+  if(offlineQueue.length === 0) return;
+
+  try{
+
+    const order = offlineQueue[0];
+
+    const payload = {
+      action:"order",
+      payload:order
+    };
+
+    const res = await fetch(API_URL,{
+      method:"POST",
+      body:JSON.stringify(payload)
+    });
+
+    const json = await res.json();
+
+    if(json.success){
+
+      offlineQueue.shift();
+      saveQueue();
+
+      sendQueue();
+
+    }
+
+  }catch(err){
+
+    console.log("offline, queue tersimpan");
+
+  }
+
+}
+
+window.addEventListener("online", () => {
+  sendQueue();
+});
+
+function setCat(c,b){
+  cat=c;
+  document.querySelectorAll('.category button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  renderMenu();
+}
+
+function renderMenu(){
+  const m=document.getElementById("menu");
+  m.innerHTML="";
+  menus[cat].forEach(i=>{
+    const d=document.createElement("div");
+    d.className="card";
+    d.innerHTML=`<b>${i.n}</b><br><small>Rp ${i.p.toLocaleString()}</small>`;
+    d.onclick=()=>add(i);
+    m.appendChild(d);
+  });
+}
+
+
+function add(i){
+
+  if(!orders[i.menu_id]){
+    orders[i.menu_id] = {
+      menu_id:i.menu_id,
+      n:i.n,
+      p:i.p,
+      q:1
+    };
+  }else{
+    orders[i.menu_id].q++;
+  }
+
+  sync();
+}
+
+
+function qty(id,v){
+
+  if(!orders[id]) return;
+
+  orders[id].q += v;
+
+  if(orders[id].q <= 0){
+    delete orders[id];
+  }
+
+  sync();
+}
+
+function sync(){
+  localStorage.setItem("orders",JSON.stringify(orders));
+  renderOrder();
+}
+
+function renderOrder(){
+  const o=document.getElementById("order");
+  const t=document.getElementById("total");
+  o.innerHTML="";
+  let sum=0;
+  Object.values(orders).forEach(i=>{
+    sum+=i.q*i.p;
+    o.innerHTML+=`
+    <div class="row">
+      <div>${i.n}</div>
+      <div>${i.q}</div>
+      <div class="action">
+        <button onclick="qty('${i.menu_id}',-1)">−</button>
+        <button onclick="qty('${i.menu_id}',1)">+</button>
+      </div>
+    </div>`;
+  });
+  t.innerText="Total: Rp "+sum.toLocaleString();
+}
+
+async function saveOrder(){
+
+  const btn = document.getElementById("btnSave");
+
+  btn.disabled = true;
+  btn.innerText = "MENYIMPAN...";
+
+  const nama = document.getElementById("nama").value;
+  const meja = document.getElementById("meja").value;
+
+  if(!nama || !meja){
+    alert("Nama dan meja wajib diisi");
+    btn.disabled = false;
+    btn.innerText = "SIMPAN";
+    return;
+  }
+
+  const items = Object.values(orders).map(i=>({
+    menu_id:i.menu_id,
+    nama:i.n,
+    qty:i.q,
+    harga:i.p
+  }));
+
+  const total = items.reduce((s,i)=>s+(i.qty*i.harga),0);
+
+  const orderData = {
+    nama:nama,
+    meja:meja,
+    total:total,
+    items:items
+  };
+
+  // simpan ke queue
+  offlineQueue.push(orderData);
+  saveQueue();
+
+  // kirim queue
+  sendQueue();
+
+  // print 
+  printOrder();
+
+  // reset order
+  orders = {};
+  localStorage.removeItem("orders");
+  renderOrder();
+
+  document.getElementById("nama").value="";
+  document.getElementById("meja").value="";
+
+  btn.disabled=false;
+  btn.innerText="SIMPAN";
+
+  alert("Order disimpan (akan sync otomatis)");
+}
+
+
+function updateStatus(){
+
+  const status = document.getElementById("status");
+
+  const pending = offlineQueue.length;
+
+  if(navigator.onLine){
+
+    status.className="status online";
+
+    if(pending > 0){
+      status.innerText = "🟢 ONLINE ("+pending+" pending sync)";
+    }else{
+      status.innerText = "🟢 ONLINE";
+    }
+
+  }else{
+
+    status.className="status offline";
+    status.innerText = "🔴 OFFLINE ("+pending+" pending)";
+  }
+}
+
+window.addEventListener("online", () => {
+
+  updateStatus();
+  sendQueue();
+
+});
+
+window.addEventListener("offline", () => {
+
+  updateStatus();
+
+});
+
+//Pengaturan fungsi print
+function formatLine(name, qty, price){
+
+  const nameWidth = 18;
+  const qtyWidth = 4;
+  const priceWidth = 10;
+
+  const n = name.padEnd(nameWidth," ");
+  const q = qty.toString().padStart(qtyWidth," ");
+  const p = price.toString().padStart(priceWidth," ");
+
+  return n + q + p;
+}
+
+function printOrder(){
+
+  const nama = document.getElementById("nama").value;
+  const meja = document.getElementById("meja").value;
+
+  let text = "";
+
+  text += "PESANAN MAKANAN\n";
+  text += "-------------------------------\n\n";
+
+  text += "Nama : " + nama + "\n";
+  text += "Meja : " + meja + "\n\n";
+
+  let total = 0;
+
+  Object.values(orders).forEach(i=>{
+
+    const subtotal = i.q * i.p;
+    total += subtotal;
+
+    text += formatLine(i.n, i.q, subtotal) + "\n";
+
+  });
+
+  text += "\n-------------------------------\n";
+  text += formatLine("TOTAL","",total) + "\n\n";
+
+  text += "Terima kasih\n";
+
+  const w = window.open("", "", "width=300,height=600");
+
+  w.document.write(`
+    <pre style="font-size:14px">
+${text}
+    </pre>
+  `);
+
+  w.print();
+
+}
+
+function goBack(){
+window.location.href = "index.html";
+}
+
+loadMenu();
+renderOrder();
+sendQueue();
+updateStatus();
+</script>
+
+    
+</body>
+</html>

@@ -1,0 +1,226 @@
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <link rel="stylesheet" href="Style.css">
+    <link rel="icon" href="XGcon-Tab.png" type="image/png">
+    <title>Koemie</title>
+</head>
+<body>
+  <div class="app">
+
+<div class="header">PESANAN KOEMIE</div>
+
+<div class="form">
+  <input id="nama" placeholder="Atas Nama">
+  <input id="meja" placeholder="Meja Nomor">
+</div>
+
+<div class="category">
+  <button class="active" onclick="setCat('makanan',this)">Makanan</button>
+  <button onclick="setCat('minuman',this)">Minuman</button>
+  <button onclick="setCat('snack',this)">Snack</button>
+  <button onclick="setCat('addon',this)">Add-on</button>
+</div>
+
+<div class="content">
+
+  <div class="menu" id="menu"></div>
+
+  <div class="order">
+    <div class="order-list" id="order"></div>
+    <div class="total" id="total">Total: Rp 0</div>
+    <div class="bottom-btn">
+      <button onclick="printOrder()">PRINT</button>
+      <button onclick="saveOrder()">SIMPAN</button>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script>
+const menus={
+  makanan:[
+    {n:"Cwie Mie Original",p:10000},
+    {n:"Cwie Mie Ayam",p:10000},
+    {n:"Cwie Mie Jamur",p:10000},
+    {n:"Cwie Mie Ayam Jamur",p:12000}
+  ],
+  minuman:[
+    {n:"Es Teh",p:4000},
+    {n:"Es Jeruk",p:5000}
+  ],
+  snack:[{n:"Pangsit Goreng",p:6000}],
+  addon:[{n:"Extra Ayam",p:3000}]
+};
+
+let cat="makanan";
+let orders=JSON.parse(localStorage.getItem("orders"))||{};
+
+function setCat(c,b){
+  cat=c;
+  document.querySelectorAll('.category button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  renderMenu();
+}
+
+function renderMenu(){
+  const m=document.getElementById("menu");
+  m.innerHTML="";
+  menus[cat].forEach(i=>{
+    const d=document.createElement("div");
+    d.className="card";
+    d.innerHTML=`<b>${i.n}</b><br><small>Rp ${i.p.toLocaleString()}</small>`;
+    d.onclick=()=>add(i);
+    m.appendChild(d);
+  });
+}
+
+function add(i){
+  orders[i.n]?orders[i.n].q++:orders[i.n]={...i,q:1};
+  sync();
+}
+
+function qty(n,v){
+  orders[n].q+=v;
+  if(orders[n].q<=0) delete orders[n];
+  sync();
+}
+
+function sync(){
+  localStorage.setItem("orders",JSON.stringify(orders));
+  renderOrder();
+}
+
+function renderOrder(){
+  const o=document.getElementById("order");
+  const t=document.getElementById("total");
+  o.innerHTML="";
+  let sum=0;
+  Object.values(orders).forEach(i=>{
+    sum+=i.q*i.p;
+    o.innerHTML+=`
+    <div class="row">
+      <div>${i.n}</div>
+      <div>${i.q}</div>
+      <div class="action">
+        <button onclick="qty('${i.n}',-1)">−</button>
+        <button onclick="qty('${i.n}',1)">+</button>
+      </div>
+    </div>`;
+  });
+  t.innerText="Total: Rp "+sum.toLocaleString();
+}
+
+function saveOrder(){
+  alert("Order tersimpan!");
+}
+
+
+function printOrder(){
+  const nama = document.getElementById("nama").value || "-";
+  const meja = document.getElementById("meja").value || "-";
+
+  const now = new Date();
+  const tgl = now.toLocaleDateString("id-ID");
+  const jam = now.toLocaleTimeString("id-ID", { hour: '2-digit', minute: '2-digit' });
+
+  let rows = "";
+  let total = 0;
+
+  Object.values(orders).forEach(i => {
+    const sub = i.q * i.p;
+    total += sub;
+    rows += `
+      <tr>
+        <td class="item">${i.n}</td>
+        <td class="qty">${i.q}</td>
+        <td class="price">${sub.toLocaleString()}</td>
+      </tr>
+    `;
+  });
+
+  const html = `
+  <html>
+  <head>
+    <title>Struk</title>
+    <style>
+      @media print {
+        body { margin: 0; }
+      }
+
+      body {
+        width: 58mm; /* ganti ke 80mm jika perlu */
+        font-family: monospace;
+        font-size: 10px;
+      }
+
+      .center {
+        text-align: center;
+      }
+
+      .line {
+        border-top: 1px dashed #000;
+        margin: 6px 0;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .item { width: 60%; }
+      .qty { width: 10%; text-align: center; }
+      .price { width: 30%; text-align: right; }
+
+      .total {
+        font-weight: bold;
+        text-align: right;
+        margin-top: 6px;
+      }
+    </style>
+  </head>
+
+  <body onload="window.print()">
+
+    <div class="center">
+      <b>KOEMIE</b><br>
+      --------------------------<br>
+      PESANAN
+    </div>
+
+    <div>
+      Tgl : ${tgl}<br>
+      Jam : ${jam}<br>
+      Nama: ${nama}<br>
+      Meja: ${meja}
+    </div>
+
+    <div class="line"></div>
+
+    <table>
+      ${rows}
+    </table>
+
+    <div class="line"></div>
+
+    <div class="total">
+      TOTAL : Rp ${total.toLocaleString()}
+    </div>
+
+  </body>
+  </html>
+  `;
+
+  const w = window.open("", "", "width=280");
+  w.document.write(html);
+  w.document.close();
+}
+
+
+renderMenu();
+renderOrder();
+</script>
+</body>
+</html>
