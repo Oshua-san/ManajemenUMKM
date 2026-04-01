@@ -5,21 +5,26 @@
     <link rel="stylesheet" href="Style.css">
     <link rel="icon" href="Xicon-Tab.png" type="image/png">
     <title>Pesanan Makanan</title>
-
+    <script src="https://jsdelivr.net"></script>
+    
 </head>
 <body>
 
   <div class="app">
 
-<!-- <div class="header">PESANAN MAKANAN <div id="status" class="status">...</div> </div> -->
 
 <header class="topbar">
 
-<button onclick="goBack()" class="btn-back">
+<!-- <button onclick="goBack()" class="btn-back">
 ←
-</button>
+</button> -->
 
-<div class="header">PESANAN MAKANAN <div id="status" class="status">...</div> </div>
+<div class="header">
+  PESANAN MAKANAN 
+  <div id="status" class="status">...</div>
+  <span id="printerStatus" style="margin-left:10px">🖨️ 🔴</span>
+  <button onclick="connectPrinter()" style="float:right">🖨️</button>
+</div>
 
 </header>
 
@@ -52,12 +57,185 @@
 </div>
 </div>
 
+<div id="toast" class="toast"></div>
 
 <script>
 
 const API_URL ="https://script.google.com/macros/s/AKfycbyGmDQj-Z7T_rkVxADzJ6UUaGQSVy1Mi_MQWeShnAVarzITvt3FfnlD2Kq8LERLmUJ4/exec";
 
 let menus = {};
+let bleDevice = null;
+let bleCharacteristic = null;
+let resto = {};
+
+async function loadResto(){
+
+  try{
+
+    const res = await fetch(API_URL + "?action=RESTO");
+    const json = await res.json();
+
+     console.log("RESTO RESPONSE:", json);
+
+    if(!json.success){
+      console.log("Gagal ambil data resto");
+      return;
+    }
+
+    resto = json.data;
+
+    console.log("Resto loaded:", resto);
+
+  }catch(err){
+
+    console.log("Error load resto", err);
+
+  }
+}
+
+
+function updatePrinterStatus(connected){
+
+  const el = document.getElementById("printerStatus");
+
+  if(connected){
+    el.innerText = "🖨️ 🟢";
+  }else{
+    el.innerText = "🖨️ 🔴";
+  }
+}
+
+async function connectPrinter(){
+
+
+  try{
+
+    bleDevice = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb']
+    });
+
+    bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+
+    const server = await bleDevice.gatt.connect();
+
+    const service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
+
+    bleCharacteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb');
+
+    localStorage.setItem("printerId", bleDevice.id);
+
+    updatePrinterStatus(true);
+
+    alert("Printer connected!");
+
+  }catch(err){
+    console.error(err); 
+    updatePrinterStatus(false);
+    alert("Gagal connect printer");
+
+  }
+}
+
+async function onDisconnected(){
+
+  console.log("Printer disconnected");
+
+  updatePrinterStatus(false);
+
+  // coba reconnect otomatis
+  try{
+
+    const server = await bleDevice.gatt.connect();
+
+    const service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
+
+    bleCharacteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb');
+
+    updatePrinterStatus(true);
+
+    console.log("Reconnect success");
+
+  }catch(err){
+
+    console.log("Reconnect gagal");
+  }
+}
+
+async function autoReconnectPrinter(){
+
+  const savedId = localStorage.getItem("printerId");
+
+  if(!savedId) return;
+
+  try{
+
+    const devices = await navigator.bluetooth.getDevices();
+
+    const device = devices.find(d => d.id === savedId);
+
+    if(!device){
+      console.log("Printer tidak ditemukan");
+      return;
+    }
+
+    bleDevice = device;
+
+    bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+
+    const server = await bleDevice.gatt.connect();
+
+    const service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
+
+    bleCharacteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb');
+
+    updatePrinterStatus(true);
+
+    console.log("Auto reconnect sukses");
+
+  }catch(err){
+
+    console.log("Auto reconnect gagal", err);
+    updatePrinterStatus(false);
+
+  }
+}
+
+window.addEventListener("load", ()=>{
+  autoReconnectPrinter();
+});
+
+function textToBytes(text){
+  return new TextEncoder().encode(text);
+}
+
+async function sendInChunks(data){
+
+  const chunkSize = 80;
+
+  for(let i=0; i<data.length; i+=chunkSize){
+
+    const chunk = data.slice(i, i+chunkSize);
+
+    try{
+
+      if (bleCharacteristic.writeValueWithoutResponse) {
+        await bleCharacteristic.writeValueWithoutResponse(chunk);
+      } else {
+        await bleCharacteristic.writeValue(chunk);
+      }
+
+      await new Promise(r=>setTimeout(r, 120));
+
+    }catch(err){
+
+      console.error("Chunk gagal dikirim", err);
+      throw err;
+
+    }
+  }
+}
+
 
 async function loadMenu(){
 
@@ -90,48 +268,62 @@ let offlineQueue = JSON.parse(localStorage.getItem("offlineQueue")) || [];
 
 function saveQueue(){
   localStorage.setItem("offlineQueue", JSON.stringify(offlineQueue));
+  updateStatus();
 }
+
+let isSending = false;
 
 async function sendQueue(){
 
+  if(isSending) return;
   if(offlineQueue.length === 0) return;
+
+  isSending = true;
 
   try{
 
     const order = offlineQueue[0];
 
-    const payload = {
-      action:"order",
-      payload:order
-    };
+    console.log("Kirim:", order);
 
     const res = await fetch(API_URL,{
       method:"POST",
-      body:JSON.stringify(payload)
+      body:JSON.stringify({
+        action:"order",
+        payload:order
+      })
     });
 
     const json = await res.json();
+    console.log("Response:", json);
 
-    if(json.success){
+    if(json.success || json.message === "duplicate ignored"){
 
       offlineQueue.shift();
       saveQueue();
-
-      sendQueue();
-
+      updateStatus();
     }
 
   }catch(err){
-
-    console.log("offline, queue tersimpan");
-
+    console.log("Masih offline / gagal kirim");
   }
 
+  isSending = false;
+
+  sendQueue();
 }
 
+
+
 window.addEventListener("online", () => {
-  sendQueue();
+  console.log("Kembali online, kirim queue...");
+
+    sendQueue();
+    updateStatus();
+
 });
+
+
 
 function setCat(c,b){
   cat=c;
@@ -211,6 +403,8 @@ function renderOrder(){
 async function saveOrder(){
 
   const btn = document.getElementById("btnSave");
+    
+    if(btn.disabled) return;
 
   btn.disabled = true;
   btn.innerText = "MENYIMPAN...";
@@ -218,8 +412,20 @@ async function saveOrder(){
   const nama = document.getElementById("nama").value;
   const meja = document.getElementById("meja").value;
 
-  if(!nama || !meja){
-    alert("Nama dan meja wajib diisi");
+  if(!nama ){ //|| !meja
+    alert("Nama wajib diisi");
+    btn.disabled = false;
+    btn.innerText = "SIMPAN";
+    return;
+  }
+  // 🔥 WAJIB: tunggu resto kalau belum ada
+  if(!resto.nama){
+    console.log("Menunggu data resto...");
+    await loadResto(); // ⬅️ INI KUNCINYA
+  }
+
+  if(!resto.nama){
+    alert("Data resto gagal dimuat!");
     btn.disabled = false;
     btn.innerText = "SIMPAN";
     return;
@@ -234,12 +440,14 @@ async function saveOrder(){
 
   const total = items.reduce((s,i)=>s+(i.qty*i.harga),0);
 
-  const orderData = {
-    nama:nama,
-    meja:meja,
-    total:total,
-    items:items
-  };
+    const orderData = {
+  id: Date.now(), // 🔥 penting (unique id)
+  nama:nama,
+  meja:meja,
+  total:total,
+  items:items,
+  sent:false // 🔥 status kirim
+};
 
   // simpan ke queue
   offlineQueue.push(orderData);
@@ -249,20 +457,43 @@ async function saveOrder(){
   sendQueue();
 
   // print 
-  printOrder();
+    if(bleCharacteristic){
+    try{
+     await printOrder();
+     }catch(e){
+     console.log("Print gagal tapi save tetap jalan");
+     }
+}
 
-  // reset order
+
+  setTimeout(()=>{
   orders = {};
   localStorage.removeItem("orders");
   renderOrder();
+    }, 300);
 
   document.getElementById("nama").value="";
   document.getElementById("meja").value="";
 
   btn.disabled=false;
   btn.innerText="SIMPAN";
+  
 
-  alert("Order disimpan (akan sync otomatis)");
+    showToast("Order disimpan", "success");
+    //showToast("Gagal simpan", "error");
+}
+
+
+function showToast(message, type="success"){
+
+  const toast = document.getElementById("toast");
+
+  toast.innerText = message;
+  toast.className = "toast show " + type;
+
+  setTimeout(()=>{
+    toast.className = "toast";
+  }, 2000); // hilang dalam 2 detik
 }
 
 
@@ -316,57 +547,158 @@ function formatLine(name, qty, price){
   return n + q + p;
 }
 
-function printOrder(){
+
+
+async function printImage(canvas){
+
+  const ctx = canvas.getContext("2d");
+  const width = canvas.width;
+  const height = canvas.height;
+
+  const bytesPerRow = Math.ceil(width / 8);
+
+  const imageData = ctx.getImageData(0, 0, width, height).data;
+
+  const data = [];
+
+  for(let y = 0; y < height; y++){
+    for(let x = 0; x < bytesPerRow; x++){
+
+      let byte = 0;
+
+      for(let bit = 0; bit < 8; bit++){
+        const px = x * 8 + bit;
+
+        if(px < width){
+          const idx = (y * width + px) * 4;
+          const color = imageData[idx];
+
+          if(color < 128){
+            byte |= (1 << (7 - bit));
+          }
+        }
+      }
+
+      data.push(byte);
+    }
+  }
+
+  const xL = bytesPerRow % 256;
+  const xH = Math.floor(bytesPerRow / 256);
+  const yL = height % 256;
+  const yH = Math.floor(height / 256);
+
+  const command = [
+    0x1D, 0x76, 0x30, 0x00,
+    xL, xH, yL, yH,
+    ...data
+  ];
+
+  // 🔥 KIRIM PER BARIS BIAR GAK CRASH
+  const chunkSize = 100;
+  for(let i=0; i<command.length; i+=chunkSize){
+    const chunk = command.slice(i, i+chunkSize);
+    await sendInChunks(new Uint8Array(chunk));
+    await new Promise(r=>setTimeout(r, 50));
+  }
+}
+
+
+
+async function printOrder(){
+
+  if(!bleCharacteristic){
+    alert("Printer belum connect!");
+    return;
+  }
 
   const nama = document.getElementById("nama").value;
-  const meja = document.getElementById("meja").value;
+  const now = new Date();
+  const tanggal = now.toLocaleString();
 
   let text = "";
 
-  text += "PESANAN MAKANAN\n";
-  text += "-------------------------------\n\n";
+  text += "\x1B\x40";
+  text += "\x1B\x61\x01";
+  text += "\x1B\x45\x01";
 
-  text += "Nama : " + nama + "\n";
-  text += "Meja : " + meja + "\n\n";
+  text += (resto.nama || "") + "\n";
+
+  text += "\x1B\x45\x00";
+  text += (resto.alamat || "") + "\n";
+  text += "Telp: " + (resto.telp || "") + "\n";
+
+  text += "----------------------------\n";
+
+  text += "\x1B\x61\x00";
+  text += "Tanggal : " + tanggal + "\n";
+  text += "Customer : " + nama + "\n";
+
+  text += "----------------------------\n";
 
   let total = 0;
 
   Object.values(orders).forEach(i=>{
-
     const subtotal = i.q * i.p;
     total += subtotal;
 
-    text += formatLine(i.n, i.q, subtotal) + "\n";
+    text += i.n + "\n";
 
+    const left = i.q + " x " + i.p.toLocaleString();
+    const right = subtotal.toLocaleString();
+
+    const space = 32 - (left.length + right.length);
+    text += left + " ".repeat(space > 0 ? space : 1) + right + "\n";
   });
 
-  text += "\n-------------------------------\n";
-  text += formatLine("TOTAL","",total) + "\n\n";
+  text += "----------------------------\n";
 
+  const totalVal = total.toLocaleString();
+  const space = 32 - ("TOTAL".length + totalVal.length);
+
+  text += "TOTAL" + " ".repeat(space > 0 ? space : 1) + totalVal + "\n\n";
+
+  text += "\x1B\x61\x01";
   text += "Terima kasih\n";
 
-  const w = window.open("", "", "width=300,height=600");
+  // ✅ GANTI QR JADI LINK TEXT
+  text += "Kunjungi Kami di:\n";
+  text += (resto.maps) + "\n\n";
 
-  w.document.write(`
-    <pre style="font-size:14px">
-${text}
-    </pre>
-  `);
+  try{
 
-  w.print();
+    const textData = new Uint8Array([...text].map(c => c.charCodeAt(0)));
+    await sendInChunks(textData);
 
+    await new Promise(r=>setTimeout(r, 200));
+
+    const cut = new Uint8Array([0x1D, 0x56, 0x41]);
+    await sendInChunks(cut);
+
+  }catch(err){
+    console.error(err);
+    alert("Gagal print");
+  }
 }
+
 
 function goBack(){
 window.location.href = "index.html";
 }
 
 loadMenu();
+loadResto();
 renderOrder();
 sendQueue();
 updateStatus();
+
+setInterval(()=>{
+  if(navigator.onLine){
+    sendQueue();
+  }
+}, 5000);
+
 </script>
 
-    
 </body>
 </html>
