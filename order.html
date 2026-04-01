@@ -6,7 +6,6 @@
     <link rel="icon" href="Xicon-Tab.png" type="image/png">
     <title>Pesanan Makanan</title>
     
-    
 </head>
 <body>
 
@@ -68,31 +67,67 @@ let bleDevice = null;
 let bleCharacteristic = null;
 let resto = {};
 
+// async function loadResto(){
+
+//   try{
+
+//     const res = await fetch(API_URL + "?action=RESTO");
+//     const json = await res.json();
+
+//      console.log("RESTO RESPONSE:", json);
+
+//     if(!json.success){
+//       console.log("Gagal ambil data resto");
+//       return;
+//     }
+
+//     resto = json.data;
+
+//     console.log("Resto loaded:", resto);
+
+//   }catch(err){
+
+//     console.log("Error load resto", err);
+
+//   }
+// }
+
+
 async function loadResto(){
+  // 1. Cek cache lokal dulu
+  const cachedResto = localStorage.getItem("cachedResto");
+  if(cachedResto){
+    resto = JSON.parse(cachedResto);
+    console.log("Resto loaded dari cache:", resto);
+  }
 
+  // 2. Ambil data terbaru dari server di background
   try{
-
     const res = await fetch(API_URL + "?action=RESTO");
     const json = await res.json();
 
-     console.log("RESTO RESPONSE:", json);
-
     if(!json.success){
-      console.log("Gagal ambil data resto");
+      console.log("Gagal ambil data resto dari server");
       return;
     }
 
     resto = json.data;
-
-    console.log("Resto loaded:", resto);
+    
+    // 3. Simpan data terbaru ke cache untuk sesi berikutnya
+    localStorage.setItem("cachedResto", JSON.stringify(resto));
+    console.log("Resto diupdate dari server:", resto);
 
   }catch(err){
-
-    console.log("Error load resto", err);
-
+    console.log("Error load resto dari server, tetap pakai cache", err);
   }
 }
 
+window.addEventListener("load", ()=>{
+  // Beri jeda 3 detik sebelum melakukan auto-reconnect bluetooth
+  setTimeout(() => {
+    autoReconnectPrinter();
+  }, 3000); 
+});
 
 function updatePrinterStatus(connected){
 
@@ -237,30 +272,76 @@ async function sendInChunks(data){
 }
 
 
+// async function loadMenu(){
+
+//   const res = await fetch(API_URL + "?action=menu");
+//   const json = await res.json();
+
+//   if(!json.success) return alert("Menu gagal diambil");
+
+//   menus = {
+//     makanan: [],
+//     minuman: [],
+//     snack: [],
+//     addon: []
+//   };
+
+//   json.data.forEach(m=>{
+//     menus[m.kategori].push({
+//       menu_id:m.menu_id,
+//       n:m.nama,
+//       p:m.harga
+//     });
+//   });
+
+//   renderMenu();
+// }
+
 async function loadMenu(){
+  // 1. Cek apakah ada data menu di memori lokal (Cache)
+  const cachedMenu = localStorage.getItem("cachedMenu");
+  
+  if(cachedMenu){
+    // Jika ada, langsung tampilkan secara instan!
+    menus = JSON.parse(cachedMenu);
+    renderMenu();
+  }
 
-  const res = await fetch(API_URL + "?action=menu");
-  const json = await res.json();
+  // 2. Tetap hubungi Google Apps Script di latar belakang untuk mengecek update terbaru
+  try {
+    const res = await fetch(API_URL + "?action=menu");
+    const json = await res.json();
 
-  if(!json.success) return alert("Menu gagal diambil");
+    if(!json.success) {
+      if(!cachedMenu) alert("Menu gagal diambil dari server");
+      return;
+    }
 
-  menus = {
-    makanan: [],
-    minuman: [],
-    snack: [],
-    addon: []
-  };
-
-  json.data.forEach(m=>{
-    menus[m.kategori].push({
-      menu_id:m.menu_id,
-      n:m.nama,
-      p:m.harga
+    // Susun ulang menu dari server
+    let newMenus = { makanan: [], minuman: [], snack: [], addon: [] };
+    json.data.forEach(m => {
+      newMenus[m.kategori].push({
+        menu_id: m.menu_id,
+        n: m.nama,
+        p: m.harga
+      });
     });
-  });
 
-  renderMenu();
+    // Perbarui variabel, simpan ke memori lokal, dan render ulang
+    menus = newMenus;
+    localStorage.setItem("cachedMenu", JSON.stringify(menus));
+    renderMenu(); 
+
+  } catch(err) {
+    console.log("Koneksi lambat/offline, tetap menggunakan menu dari cache.");
+  }
 }
+
+window.addEventListener("load", ()=>{
+  setTimeout(() => {
+    autoReconnectPrinter();
+  }, 3000); // Delay 3 detik
+});
 
 let cat="makanan";
 let orders=JSON.parse(localStorage.getItem("orders"))||{};
@@ -419,16 +500,34 @@ async function saveOrder(){
     return;
   }
   // 🔥 WAJIB: tunggu resto kalau belum ada
+  // if(!resto.nama){
+  //   console.log("Menunggu data resto...");
+  //   await loadResto(); // ⬅️ INI KUNCINYA
+  // }
+
+  // if(!resto.nama){
+  //   alert("Data resto gagal dimuat!");
+  //   btn.disabled = false;
+  //   btn.innerText = "SIMPAN";
+  //   return;
+  // }
+
+  // Cek apakah data resto sudah ada (dari cache atau server)
   if(!resto.nama){
     console.log("Menunggu data resto...");
-    await loadResto(); // ⬅️ INI KUNCINYA
+    await loadResto(); 
   }
 
+  // Jika internet mati total dan cache resto belum pernah dibuat sama sekali
   if(!resto.nama){
-    alert("Data resto gagal dimuat!");
-    btn.disabled = false;
-    btn.innerText = "SIMPAN";
-    return;
+    console.log("Gagal mendapat data resto, menggunakan data darurat.");
+    // Daripada pesanan gagal disimpan/print, gunakan data darurat
+    resto = { 
+      nama: "Kasir UMKM", 
+      alamat: "Alamat belum disinkronisasi", 
+      telp: "-", 
+      maps: "-" 
+    };
   }
 
   const items = Object.values(orders).map(i=>({
@@ -478,23 +577,9 @@ async function saveOrder(){
   btn.disabled=false;
   btn.innerText="SIMPAN";
   
+
     alert("Order disimpan");
-    //showToast("Order disimpan", "success");
-    //showToast("Gagal simpan", "error");
 }
-
-
-// function showToast(message, type="success"){
-
-//   const toast = document.getElementById("toast");
-
-//   toast.innerText = message;
-//   toast.className = "toast show " + type;
-
-//   setTimeout(()=>{
-//     toast.className = "toast";
-//   }, 2000); // hilang dalam 2 detik
-// }
 
 
 function updateStatus(){
@@ -699,6 +784,5 @@ setInterval(()=>{
 }, 5000);
 
 </script>
-
 </body>
 </html>
