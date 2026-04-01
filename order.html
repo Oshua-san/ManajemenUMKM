@@ -5,7 +5,7 @@
     <link rel="stylesheet" href="Style.css">
     <link rel="icon" href="Xicon-Tab.png" type="image/png">
     <title>Pesanan Makanan</title>
-    <script src="https://jsdelivr.net"></script>
+    
     
 </head>
 <body>
@@ -478,23 +478,23 @@ async function saveOrder(){
   btn.disabled=false;
   btn.innerText="SIMPAN";
   
-
-    showToast("Order disimpan", "success");
+    alert("Order disimpan");
+    //showToast("Order disimpan", "success");
     //showToast("Gagal simpan", "error");
 }
 
 
-function showToast(message, type="success"){
+// function showToast(message, type="success"){
 
-  const toast = document.getElementById("toast");
+//   const toast = document.getElementById("toast");
 
-  toast.innerText = message;
-  toast.className = "toast show " + type;
+//   toast.innerText = message;
+//   toast.className = "toast show " + type;
 
-  setTimeout(()=>{
-    toast.className = "toast";
-  }, 2000); // hilang dalam 2 detik
-}
+//   setTimeout(()=>{
+//     toast.className = "toast";
+//   }, 2000); // hilang dalam 2 detik
+// }
 
 
 function updateStatus(){
