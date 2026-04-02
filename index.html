@@ -256,29 +256,67 @@ beginAtZero:true
 
 }
 
+// function renderTopProducts(list){
+
+// const el = document.getElementById("topProducts");
+
+// el.innerHTML="";
+
+// if(!list || list.length === 0){
+//   el.innerHTML = "<small>Tidak ada data</small>";
+//   return;
+// }
+
+// list.forEach((p,i)=>{
+
+// el.innerHTML += `
+// <div class="product-row">
+// <div>${i+1}. ${p.nama}</div>
+// <div>${p.qty}</div>
+// </div>
+// `;
+
+// });
+
+// }
+
 function renderTopProducts(list){
+  const el = document.getElementById("topProducts");
+  el.innerHTML="";
 
-const el = document.getElementById("topProducts");
+  if(!list || Object.keys(list).length === 0){
+    el.innerHTML = "<small>Tidak ada data</small>";
+    return;
+  }
 
-el.innerHTML="";
+  // Loop per kategori
+  for(const kategori in list){
+    const catDiv = document.createElement("div");
+    catDiv.classList.add("category-section");
 
-if(!list || list.length === 0){
-  el.innerHTML = "<small>Tidak ada data</small>";
-  return;
+    const title = document.createElement("h4");
+    title.innerText = kategori.toUpperCase();
+    catDiv.appendChild(title);
+
+    const items = list[kategori];
+
+    if(items.length === 0){
+      const empty = document.createElement("small");
+      empty.innerText = "Tidak ada data";
+      catDiv.appendChild(empty);
+    } else {
+      items.forEach((p,i)=>{
+        const row = document.createElement("div");
+        row.classList.add("product-row");
+        row.innerHTML = `<div>${i+1}. ${p.nama}</div><div>${p.qty}</div>`;
+        catDiv.appendChild(row);
+      });
+    }
+
+    el.appendChild(catDiv);
+  }
 }
 
-list.forEach((p,i)=>{
-
-el.innerHTML += `
-<div class="product-row">
-<div>${i+1}. ${p.nama}</div>
-<div>${p.qty}</div>
-</div>
-`;
-
-});
-
-}
 
 
 loadDashboard();
